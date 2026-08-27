@@ -1,0 +1,78 @@
+# Builds the Angular frontend and deploys it to GitHub Pages. Talks to the
+# backend cross-origin (see deploy.yml / deploy/README.md for that half).
+#
+# Repo variables (Settings > Secrets and variables > Actions > Variables):
+#   API_BASE_URL       - bare domain of the deployed backend, e.g. api.example.com
+#                         (same value as the APP_DOMAIN secret used by deploy.yml)
+#   PAGES_CUSTOM_DOMAIN - optional; set only if serving Pages from your own domain
+#                         instead of <owner>.github.io/<repo>/
+name: Deploy frontend to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'web-app/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '14'
+
+      - name: Install dependencies
+        working-directory: web-app
+        run: npm ci
+
+      - name: Point the build at the backend
+        working-directory: web-app
+        run: sed -i "s#__API_BASE_URL__#${API_BASE_URL}#" src/environments/environment.prod.ts
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+
+      - name: Determine base href
+        id: basehref
+        run: |
+          if [ -n "${{ vars.PAGES_CUSTOM_DOMAIN }}" ]; then
+            echo "value=/" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        working-directory: web-app
+        run: npx ng build --base-href "${{ steps.basehref.outputs.value }}"
+
+      - name: Add CNAME for custom domain
+        if: vars.PAGES_CUSTOM_DOMAIN != ''
+        run: echo "${{ vars.PAGES_CUSTOM_DOMAIN }}" > web-app/dist/web-app/CNAME
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web-app/dist/web-app
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

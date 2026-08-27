@@ -1,9 +1,7 @@
-{# The Angular frontend calls the backend at "<hostname>:8080" (hardcoded in
-   backend.service.ts), and the whole app (frontend + API) is bundled into one
-   Spring Boot jar. So Caddy terminates TLS on the public :8080 the frontend
-   already expects, and proxies to Spring Boot running internally on
-   {{ app_internal_port }}. Port 80 stays open only so Caddy can complete the
-   Let's Encrypt HTTP challenge; it issues no site of its own there. #}
-{{ domain_name }}:8080 {
+{# Backend-only host now: the Angular frontend lives on GitHub Pages and
+   calls this API cross-origin (backend already sends permissive CORS
+   headers - see DevCorsConfiguration.groovy). Caddy terminates standard
+   HTTPS (80/443, automatic cert) and proxies to Spring Boot internally. #}
+{{ domain_name }} {
     reverse_proxy localhost:{{ app_internal_port }}
 }

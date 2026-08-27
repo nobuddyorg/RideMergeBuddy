@@ -1,12 +1,21 @@
-# Builds the app and rolls it out to the already-provisioned GCP VM via
+# Builds the backend and rolls it out to the already-provisioned GCP VM via
 # Ansible. Does NOT run `terraform apply` - infra changes stay a deliberate,
 # manual step (see deploy/README.md); this workflow only redeploys the app
 # onto whatever host deploy/ansible/inventory.ini points at.
-name: Deploy
+#
+# The frontend deploys separately to GitHub Pages - see pages.yml.
+name: Deploy backend
 
 on:
   push:
     branches: [master]
+    paths:
+      - 'src/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - 'deploy/build.sh'
+      - 'deploy/ansible/**'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -25,11 +34,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '11'
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '14'
 
       - name: Write .secrets (baked into the jar at build time)
         run: printf '%s' "$APP_SECRETS_JSON" > src/main/resources/.secrets

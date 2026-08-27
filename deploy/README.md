@@ -1,15 +1,18 @@
-# Hosting on GCP (free tier)
+# Hosting: GitHub Pages (frontend) + GCP free tier (backend)
 
-Provisions one `e2-micro` Compute Engine VM (Always Free tier, no time limit)
-in `us-central1`, with a static external IP, and configures it with Caddy
-(automatic HTTPS, no manual certs) reverse-proxying to the Spring Boot app.
-No Docker, no load balancer, no billed extras.
+Two independently-deployed pieces on two origins:
 
-The Angular frontend hardcodes its backend URL as `<hostname>:8080`
-(`web-app/src/app/services/backend/backend.service.ts`), so rather than
-changing app code, the whole app (frontend static files + API) is bundled
-into one jar and Caddy terminates HTTPS on the public `:8080` the frontend
-already expects, proxying internally to Spring Boot on `:8081`.
+- **Frontend** (Angular) → GitHub Pages, built and published by
+  `.github/workflows/pages.yml`.
+- **Backend** (Spring Boot API) → a single `e2-micro` Compute Engine VM
+  (GCP Always Free tier, no time limit), with a static external IP, fronted
+  by Caddy for automatic HTTPS. No Docker, no load balancer, no billed
+  extras.
+
+They talk to each other cross-origin: the backend already sends permissive
+CORS headers for all paths (`DevCorsConfiguration.groovy`), and the frontend
+points at the backend's domain via `environment.apiUrl` — no same-origin
+bundling trick needed.
 
 ## One-time setup
 
@@ -21,8 +24,10 @@ already expects, proxying internally to Spring Boot on `:8081`.
 3. Create `src/main/resources/.secrets` per the main README (Strava client
    id/secret + Google static-maps API key). This file is git-ignored and
    gets baked into the jar at build time — it's never handled by Ansible.
+4. In the repo's Settings → Pages, set Source to "GitHub Actions" (one-time,
+   can't be scripted here).
 
-## Provision the VM
+## Provision the backend VM
 
 ```
 cd deploy/terraform
@@ -32,67 +37,60 @@ terraform apply
 
 Note the `external_ip` output.
 
-## Point your domain at it
+## Point your backend domain at it
 
-Create an A record for your domain pointing at `external_ip`. Wait for it
-to propagate before the next step (Caddy needs it to issue a cert).
+Create an A record for your backend's domain (e.g. `api.example.com`)
+pointing at `external_ip`. Wait for it to propagate before deploying
+(Caddy needs it reachable to issue a cert).
 
-## Build the deployable jar
+## Deploy the backend
 
 ```
 ./deploy/build.sh
-```
-
-Produces `build/libs/activitymerger-0.1.jar` with the Angular production
-build and your secrets baked in.
-
-## Configure and deploy with Ansible
-
-```
 cd deploy/ansible
 cp inventory.ini.example inventory.ini
 # edit inventory.ini: ansible_host = the external_ip from terraform,
 #                      ansible_user = the ssh_user from terraform.tfvars
 ```
 
-Edit `domain_name` in `playbook.yml` to your real domain, then:
+Edit `domain_name` in `playbook.yml` to your real backend domain, then:
 
 ```
 ansible-playbook -i inventory.ini playbook.yml
 ```
 
 This installs Java, installs Caddy, ships the jar, and starts both as
-systemd services (`activitymerger`, `caddy`), enabled on boot.
+systemd services (`activitymerger`, `caddy`), enabled on boot. Re-running
+after a code change (`./deploy/build.sh` + this command again) is safe —
+idempotent, just re-copies the jar and restarts the service if it changed.
 
-## After deploying
+## Deploy the frontend
 
-- Visit `https://yourdomain.com:8080` — Caddy issues the cert automatically
-  on first request (needs port 80 reachable for the ACME challenge, which
-  Terraform already opened).
+Push to `master` (or run `.github/workflows/pages.yml` manually) — see
+below for the repo variables it needs. It publishes to
+`https://<owner>.github.io/<repo>/` by default, or your own domain if you
+set `PAGES_CUSTOM_DOMAIN`.
+
+## After both are deployed
+
 - In your Strava API app settings, set the Authorized Callback Domain to
-  your real domain.
-- In Google Cloud Console, restrict the static-maps API key to your domain.
-
-## Redeploying after a code change
-
-```
-./deploy/build.sh
-cd deploy/ansible && ansible-playbook -i inventory.ini playbook.yml
-```
-
-The playbook is idempotent — it just re-copies the jar and restarts the
-service if it changed.
+  wherever the frontend is served from (GitHub Pages domain, or your
+  custom domain).
+- In Google Cloud Console, restrict the static-maps API key to that same
+  domain.
 
 ## Redeploying automatically (GitHub Actions)
 
-`.github/workflows/deploy.yml` builds the jar and runs the Ansible playbook
-on every push to `master` (or manually via "Run workflow"). It does **not**
-run `terraform apply` — infra changes stay a manual step you run locally, so
-the VM/firewall/IP never change without you deliberately doing it.
+Two independent workflows, each path-filtered so a frontend-only or
+backend-only change doesn't trigger the other:
 
-It targets the GitHub Environment named `production` (created automatically
-on first run; add required reviewers there later if you want a manual gate
-before deploys). Add these as repository (or environment) secrets:
+**`.github/workflows/deploy.yml`** (backend) — builds the jar and runs the
+Ansible playbook on every push to `master` touching backend paths, or
+manually via "Run workflow". It does **not** run `terraform apply` — infra
+changes stay a manual step you run locally, so the VM/firewall/IP never
+change without you deliberately doing it. Targets the GitHub Environment
+named `production` (auto-created on first run; add required reviewers there
+later for a manual gate). Repository secrets it needs:
 
 | Secret               | Value                                                        |
 |----------------------|---------------------------------------------------------------|
@@ -100,7 +98,18 @@ before deploys). Add these as repository (or environment) secrets:
 | `GCP_SSH_PRIVATE_KEY`| Private key matching `ssh_public_key_path` in `terraform.tfvars` |
 | `GCP_HOST`           | The `external_ip` from `terraform apply`                    |
 | `GCP_SSH_USER`       | The `ssh_user` from `terraform.tfvars`                       |
-| `APP_DOMAIN`         | Your real domain (same as `domain_name` in `playbook.yml`)  |
+| `APP_DOMAIN`         | Your real backend domain (same as `domain_name` in `playbook.yml`) |
 
-After provisioning the VM once via Terraform and adding these secrets, pushes
-to `master` deploy automatically.
+**`.github/workflows/pages.yml`** (frontend) — builds the Angular app and
+publishes it to GitHub Pages on every push to `master` touching `web-app/`,
+or manually. Repository *variables* (not secrets — these aren't sensitive)
+it needs, under Settings → Secrets and variables → Actions → Variables:
+
+| Variable              | Value                                                                 |
+|-----------------------|------------------------------------------------------------------------|
+| `API_BASE_URL`        | Bare backend domain, e.g. `api.example.com` (same as `APP_DOMAIN` above) |
+| `PAGES_CUSTOM_DOMAIN` | Optional — only if serving Pages from your own domain instead of `<owner>.github.io/<repo>/` |
+
+After provisioning the VM once via Terraform, enabling Pages once in repo
+settings, and adding the secrets/variables above, pushes to `master` deploy
+both halves automatically (whichever half actually changed).

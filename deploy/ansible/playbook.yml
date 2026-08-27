@@ -6,7 +6,7 @@
   vars:
     app_user: activitymerger
     app_dir: /opt/activitymerger
-    app_internal_port: 8081
+    app_internal_port: 8080
     domain_name: "REPLACE_ME.example.com"
     jar_src: "{{ playbook_dir }}/../../build/libs/activitymerger-0.1.jar"
 
