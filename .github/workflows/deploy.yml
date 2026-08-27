@@ -1,7 +1,6 @@
-# Builds the backend and rolls it out to the already-provisioned GCP VM via
-# Ansible. Does NOT run `terraform apply` - infra changes stay a deliberate,
-# manual step (see deploy/README.md); this workflow only redeploys the app
-# onto whatever host deploy/ansible/inventory.ini points at.
+# Provisions/updates the GCP VM with Terraform, builds the backend jar, and
+# rolls it out via Ansible. Runs on every push to master touching backend
+# paths, or manually via "Run workflow".
 #
 # The frontend deploys separately to GitHub Pages - see pages.yml.
 name: Deploy backend
@@ -13,8 +12,7 @@ on:
       - 'src/**'
       - 'build.gradle'
       - 'settings.gradle'
-      - 'deploy/build.sh'
-      - 'deploy/ansible/**'
+      - 'deploy/**'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
@@ -28,6 +26,42 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Derive an SSH keypair for the VM from the private key secret
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keygen -y -f ~/.ssh/deploy_key > ~/.ssh/deploy_key.pub
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+
+      - name: Terraform init
+        working-directory: deploy/terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=activitymerger"
+
+      - name: Terraform apply
+        working-directory: deploy/terraform
+        run: terraform apply -auto-approve
+        env:
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+          TF_VAR_ssh_user: ${{ vars.GCP_SSH_USER }}
+          TF_VAR_ssh_public_key_path: /home/runner/.ssh/deploy_key.pub
+
+      - name: Read VM IP from Terraform state
+        id: tf
+        working-directory: deploy/terraform
+        run: echo "ip=$(terraform output -raw external_ip)" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -48,25 +82,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ansible
 
-      - name: Configure SSH
+      - name: Trust the VM host key
+        # On a first run the VM was just created by Terraform above and SSH
+        # may not have come up yet, so retry instead of failing outright.
         run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$GCP_HOST" >> ~/.ssh/known_hosts
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
-          GCP_HOST: ${{ secrets.GCP_HOST }}
+          IP="${{ steps.tf.outputs.ip }}"
+          for i in $(seq 1 30); do
+            if ssh-keyscan -H "$IP" >> ~/.ssh/known_hosts 2>/dev/null && grep -q "$IP" ~/.ssh/known_hosts; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Timed out waiting for SSH on $IP" >&2
+          exit 1
 
       - name: Run Ansible playbook
         working-directory: deploy/ansible
         run: |
           cat > inventory.ini <<EOF
           [app]
-          activitymerger ansible_host=$GCP_HOST ansible_user=$GCP_SSH_USER ansible_ssh_private_key_file=~/.ssh/deploy_key
+          activitymerger ansible_host=${{ steps.tf.outputs.ip }} ansible_user=${{ vars.GCP_SSH_USER }} ansible_ssh_private_key_file=~/.ssh/deploy_key
           EOF
           ansible-playbook -i inventory.ini playbook.yml -e "domain_name=$APP_DOMAIN"
         env:
-          GCP_HOST: ${{ secrets.GCP_HOST }}
-          GCP_SSH_USER: ${{ secrets.GCP_SSH_USER }}
-          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}

@@ -48,5 +48,6 @@ deploy/terraform/*.tfstate
 deploy/terraform/*.tfstate.*
 deploy/terraform/.terraform.lock.hcl
 deploy/terraform/terraform.tfvars
+deploy/terraform/backend.hcl
 deploy/ansible/inventory.ini
 

@@ -1,11 +1,13 @@
 # Builds the Angular frontend and deploys it to GitHub Pages. Talks to the
 # backend cross-origin (see deploy.yml / deploy/README.md for that half).
+# Publishes as a normal project page (https://nobuddy.org/RideMergeBuddy) -
+# nobuddy.org is already the org's Pages custom domain, so no CNAME needed
+# in this repo.
 #
 # Repo variables (Settings > Secrets and variables > Actions > Variables):
 #   API_BASE_URL       - bare domain of the deployed backend, e.g. api.example.com
-#                         (same value as the APP_DOMAIN secret used by deploy.yml)
-#   PAGES_CUSTOM_DOMAIN - optional; set only if serving Pages from your own domain
-#                         instead of <owner>.github.io/<repo>/
+#                         (same value as the APP_DOMAIN variable used by deploy.yml)
+#   PAGES_CUSTOM_DOMAIN - leave unset for this repo (see above)
 name: Deploy frontend to GitHub Pages
 
 on:

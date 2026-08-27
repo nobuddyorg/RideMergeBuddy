@@ -7,6 +7,12 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  # State lives in GCS instead of locally, so both your machine and CI
+  # (deploy.yml) operate on the same state. Bucket/prefix are supplied at
+  # `terraform init` time (-backend-config=backend.hcl locally; explicit
+  # -backend-config flags in CI) - see deploy/README.md.
+  backend "gcs" {}
 }
 
 provider "google" {
