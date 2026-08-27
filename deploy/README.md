@@ -82,3 +82,25 @@ cd deploy/ansible && ansible-playbook -i inventory.ini playbook.yml
 
 The playbook is idempotent — it just re-copies the jar and restarts the
 service if it changed.
+
+## Redeploying automatically (GitHub Actions)
+
+`.github/workflows/deploy.yml` builds the jar and runs the Ansible playbook
+on every push to `master` (or manually via "Run workflow"). It does **not**
+run `terraform apply` — infra changes stay a manual step you run locally, so
+the VM/firewall/IP never change without you deliberately doing it.
+
+It targets the GitHub Environment named `production` (created automatically
+on first run; add required reviewers there later if you want a manual gate
+before deploys). Add these as repository (or environment) secrets:
+
+| Secret               | Value                                                        |
+|----------------------|---------------------------------------------------------------|
+| `APP_SECRETS_JSON`   | Contents of `src/main/resources/.secrets` (the Strava/Google JSON) |
+| `GCP_SSH_PRIVATE_KEY`| Private key matching `ssh_public_key_path` in `terraform.tfvars` |
+| `GCP_HOST`           | The `external_ip` from `terraform apply`                    |
+| `GCP_SSH_USER`       | The `ssh_user` from `terraform.tfvars`                       |
+| `APP_DOMAIN`         | Your real domain (same as `domain_name` in `playbook.yml`)  |
+
+After provisioning the VM once via Terraform and adding these secrets, pushes
+to `master` deploy automatically.
