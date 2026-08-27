@@ -6,6 +6,7 @@ build/
 !**/src/test/**/build/
 /src-api
 **/src/main/**/.secrets
+/src/main/resources/static/
 **/.openapi-generator-ignore
 /docs/api/.openapi-generator
 
@@ -41,3 +42,12 @@ out/
 .vscode/
 
 node_modules/
+
+### Deploy (Terraform/Ansible) ###
+deploy/terraform/.terraform/
+deploy/terraform/*.tfstate
+deploy/terraform/*.tfstate.*
+deploy/terraform/.terraform.lock.hcl
+deploy/terraform/terraform.tfvars
+deploy/ansible/inventory.ini
+
