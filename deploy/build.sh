@@ -15,6 +15,10 @@ if [ ! -f src/main/resources/.secrets ]; then
 fi
 
 echo "==> Building Spring Boot jar"
-./gradlew clean build -x test
+# bootJar (not build/assemble) deliberately skips openApiGenerate's docs
+# chain, which boots the whole app mid-build just to scrape its own
+# OpenAPI JSON - unnecessary and fragile for a deploy, not needed to
+# produce the runnable jar.
+./gradlew clean bootJar
 
 echo "==> Done: build/libs/activitymerger-0.1.jar"
