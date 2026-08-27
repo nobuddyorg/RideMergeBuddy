@@ -4,3 +4,8 @@ zone                  = "us-central1-a"
 ssh_user              = "youruser"
 ssh_public_key_path   = "~/.ssh/id_ed25519.pub"
 # ssh_source_ranges   = ["203.0.113.4/32"]  # narrow this to your own IP if you can
+
+cloudflare_api_token = "your-cloudflare-api-token"  # Zone:DNS:Edit + Zone:Zone:Read on dns_zone_name
+dns_zone_name        = "nobuddy.org"
+backend_subdomain    = "api"
+frontend_domain      = "nobuddy.org"

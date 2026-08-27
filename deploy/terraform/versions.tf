@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 5.0"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 3.0"
+    }
   }
 
   # State lives in GCS instead of locally, so both your machine and CI
@@ -19,4 +23,8 @@ provider "google" {
   project = var.project_id
   region  = var.region
   zone    = var.zone
+}
+
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token
 }

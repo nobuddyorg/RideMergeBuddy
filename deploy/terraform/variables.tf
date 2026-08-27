@@ -41,3 +41,27 @@ variable "ssh_source_ranges" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token, scoped to Zone:DNS:Edit on dns_zone_name"
+  type        = string
+  sensitive   = true
+}
+
+variable "dns_zone_name" {
+  description = "Cloudflare zone (root domain) the backend record is created in"
+  type        = string
+  default     = "nobuddy.org"
+}
+
+variable "backend_subdomain" {
+  description = "Subdomain the backend API is served on, e.g. \"api\" -> api.nobuddy.org"
+  type        = string
+  default     = "api"
+}
+
+variable "frontend_domain" {
+  description = "Domain the frontend is served from - the Maps Static API key is restricted to it"
+  type        = string
+  default     = "nobuddy.org"
+}

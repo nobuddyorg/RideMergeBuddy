@@ -64,3 +64,39 @@ resource "google_compute_instance" "app" {
     app = var.name
   }
 }
+
+locals {
+  backend_domain = "${var.backend_subdomain}.${var.dns_zone_name}"
+}
+
+data "cloudflare_zone" "root" {
+  name = var.dns_zone_name
+}
+
+resource "cloudflare_record" "backend" {
+  zone_id = data.cloudflare_zone.root.id
+  name    = var.backend_subdomain
+  type    = "A"
+  value   = google_compute_address.static_ip.address
+  ttl     = 300
+  # Caddy issues its own Let's Encrypt cert and needs to see real client
+  # IPs/ACME challenges directly - keep this record un-proxied (grey cloud).
+  proxied = false
+}
+
+# Named after the actual backend domain, not just the project - a project
+# can end up hosting more than one backend/key over time.
+resource "google_apikeys_key" "maps_static" {
+  name         = "${replace(local.backend_domain, ".", "-")}-static-maps"
+  display_name = "Maps Static API key for ${local.backend_domain}"
+
+  restrictions {
+    api_targets {
+      service = "static-maps-backend.googleapis.com"
+    }
+
+    browser_key_restrictions {
+      allowed_referrers = ["https://${var.frontend_domain}/*"]
+    }
+  }
+}
