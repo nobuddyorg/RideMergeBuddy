@@ -55,9 +55,9 @@ variable "dns_zone_name" {
 }
 
 variable "backend_subdomain" {
-  description = "Subdomain the backend API is served on, e.g. \"api\" -> api.nobuddy.org"
+  description = "Subdomain the backend API is served on. Kept app-specific rather than generic \"api\", since nobuddy.org can end up hosting more than one backend."
   type        = string
-  default     = "api"
+  default     = "activitymerger-api"
 }
 
 variable "frontend_domain" {

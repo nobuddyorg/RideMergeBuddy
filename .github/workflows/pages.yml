@@ -5,8 +5,11 @@
 # in this repo.
 #
 # Repo variables (Settings > Secrets and variables > Actions > Variables):
-#   API_BASE_URL       - bare domain of the deployed backend, e.g. api.example.com
-#                         (same value as the APP_DOMAIN variable used by deploy.yml)
+#   API_BASE_URL       - bare backend domain. Terraform computes and owns this
+#                         (backend_subdomain + dns_zone_name in
+#                         deploy/terraform/variables.tf) - defaults to
+#                         activitymerger-api.nobuddy.org, so set this to match
+#                         unless you changed those variables.
 #   PAGES_CUSTOM_DOMAIN - leave unset for this repo (see above)
 name: Deploy frontend to GitHub Pages
 

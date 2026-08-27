@@ -7,5 +7,5 @@ ssh_public_key_path   = "~/.ssh/id_ed25519.pub"
 
 cloudflare_api_token = "your-cloudflare-api-token"  # Zone:DNS:Edit + Zone:Zone:Read on dns_zone_name
 dns_zone_name        = "nobuddy.org"
-backend_subdomain    = "api"
+backend_subdomain    = "activitymerger-api"
 frontend_domain      = "nobuddy.org"

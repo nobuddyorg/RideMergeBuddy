@@ -12,11 +12,16 @@ Actions once set up:
   (GCP Always Free tier, no time limit), provisioned by Terraform and
   configured by Ansible, both run from `.github/workflows/deploy.yml`.
   Fronted by Caddy for automatic HTTPS. No Docker, no load balancer, no
-  billed extras beyond the VM itself.
+  billed extras beyond the VM itself. Terraform also creates the DNS
+  record (Cloudflare, since that's where `nobuddy.org`'s zone lives) and
+  the Maps Static API key itself, restricted to the frontend's domain.
 
 They talk to each other cross-origin: the backend already sends permissive
 CORS headers for all paths (`DevCorsConfiguration.groovy`), and the frontend
-points at the backend's domain via `environment.apiUrl`.
+points at the backend's domain via `environment.apiUrl`. Nothing about
+either deploy needs a manual DNS or Console step once the secrets below are
+in place - `deploy.yml` provisions everything from an empty project on its
+own.
 
 ## One-time GCP setup (before the first CI run)
 
@@ -29,16 +34,20 @@ as a deliberate one-time step you do by hand:
    gsutil mb -l us-central1 gs://YOUR_PROJECT_ID-tfstate
    gsutil versioning set on gs://YOUR_PROJECT_ID-tfstate
    ```
-2. **A service account for CI**, scoped to what Terraform needs to manage:
+2. **A service account for CI**, scoped to what Terraform needs to manage.
+   On a brand-new GCP project, Compute Engine API and the Maps Static API
+   aren't enabled yet, and Terraform itself needs to enable them - so this
+   also needs Service Usage Admin (to enable APIs) and API Keys Admin (to
+   create/restrict the Maps key), not just Compute/Storage Admin:
    ```
    gcloud iam service-accounts create activitymerger-ci \
      --display-name "activitymerger CI"
-   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-     --member "serviceAccount:activitymerger-ci@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-     --role roles/compute.admin
-   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-     --member "serviceAccount:activitymerger-ci@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-     --role roles/storage.admin
+   for role in roles/compute.admin roles/storage.admin \
+               roles/serviceusage.serviceUsageAdmin roles/serviceusage.apiKeysAdmin; do
+     gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+       --member "serviceAccount:activitymerger-ci@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+       --role "$role"
+   done
    gcloud iam service-accounts keys create ci-key.json \
      --iam-account activitymerger-ci@YOUR_PROJECT_ID.iam.gserviceaccount.com
    ```
@@ -53,11 +62,16 @@ as a deliberate one-time step you do by hand:
    ```
    The private key becomes `GCP_SSH_PRIVATE_KEY` below; CI derives the
    matching public key itself at runtime. Delete both local files after.
-4. Create `src/main/resources/.secrets` locally per the main README (Strava
-   client id/secret + Google static-maps API key) — you'll paste its
-   contents into a secret below, then it never needs to exist as a file
-   outside CI/your machine again.
-5. In the repo's Settings → Pages, set Source to "GitHub Actions"
+4. Write down your Strava client id/secret as JSON:
+   `{"client_id": "...", "client_secret": "..."}` — that becomes the
+   `APP_SECRETS_JSON` secret below. (No `google_api_key` field needed here:
+   `deploy.yml` merges in the Maps Static API key Terraform just created,
+   automatically, on every run.)
+5. **A Cloudflare API token**, scoped to `Zone:DNS:Edit` + `Zone:Zone:Read`
+   on just the `nobuddy.org` zone (dash.cloudflare.com → My Profile → API
+   Tokens → Create Token → "Edit zone DNS" template, then restrict Zone
+   Resources to that one zone).
+6. In the repo's Settings → Pages, set Source to "GitHub Actions"
    (one-time, can't be scripted here).
 
 ## GitHub configuration
@@ -66,11 +80,12 @@ Under Settings → Secrets and variables → Actions:
 
 **Secrets** (sensitive):
 
-| Secret                | Value                                                    |
-|------------------------|-----------------------------------------------------------|
-| `GCP_SA_KEY`           | Contents of `ci-key.json` from step 2 above              |
-| `GCP_SSH_PRIVATE_KEY`  | Contents of `ci_deploy_key` from step 3 above            |
-| `APP_SECRETS_JSON`     | Contents of `src/main/resources/.secrets` from step 4    |
+| Secret                 | Value                                                              |
+|------------------------|---------------------------------------------------------------------|
+| `GCP_SA_KEY`           | Contents of `ci-key.json` from step 2 above                        |
+| `GCP_SSH_PRIVATE_KEY`  | Contents of `ci_deploy_key` from step 3 above                      |
+| `APP_SECRETS_JSON`     | `{"client_id": "...", "client_secret": "..."}` from step 4 above   |
+| `CLOUDFLARE_API_TOKEN` | The token from step 5 above                                        |
 
 **Variables** (not sensitive):
 
@@ -79,15 +94,12 @@ Under Settings → Secrets and variables → Actions:
 | `TF_STATE_BUCKET`  | The GCS bucket name from step 1, e.g. `your-project-id-tfstate` |
 | `GCP_PROJECT_ID`   | Your GCP project ID                                          |
 | `GCP_SSH_USER`     | Username to create on the VM, e.g. `deploy`                  |
-| `APP_DOMAIN`       | Your backend's domain, e.g. `api.example.com`                |
-| `API_BASE_URL`     | Same bare domain as `APP_DOMAIN` — this is what the frontend build points at |
+| `API_BASE_URL`     | `activitymerger-api.nobuddy.org` — must match `backend_subdomain` + `dns_zone_name` in `deploy/terraform/variables.tf` (that's where the domain is actually decided; change both together if you want a different one) |
 | `PAGES_CUSTOM_DOMAIN` | Leave unset for this repo — Pages already publishes to `nobuddy.org/RideMergeBuddy` via the org's existing custom domain |
 
-Point `APP_DOMAIN`'s DNS (an A record) at the VM's IP once Terraform has
-created it — the first `deploy.yml` run creates the VM and prints its IP in
-the "Read VM IP" step's output; after that, the IP is stable (Terraform
-reserves a static address) and Caddy issues its own cert automatically once
-the domain resolves to it.
+No DNS step needed — Terraform creates the A record (Cloudflare) itself as
+part of `terraform apply`, pointed at the static IP it just reserved, and
+Caddy issues its own cert automatically once that resolves.
 
 ## Deploying
 
@@ -119,11 +131,16 @@ terraform apply
 ```
 
 ```
-./deploy/build.sh   # needs src/main/resources/.secrets present first
+# .secrets needs client_id/client_secret plus the Maps key Terraform just
+# made - CI merges these automatically (see deploy.yml); doing it by hand:
+jq -n --argjson strava "$(cat your-strava-creds.json)" \
+      --arg maps "$(cd deploy/terraform && terraform output -raw maps_static_api_key)" \
+      '$strava + {google_api_key: $maps}' > src/main/resources/.secrets
+
+./deploy/build.sh
 cd deploy/ansible
 cp inventory.ini.example inventory.ini   # fill in ansible_host (terraform's external_ip output), ansible_user
-# edit domain_name in playbook.yml
-ansible-playbook -i inventory.ini playbook.yml
+ansible-playbook -i inventory.ini playbook.yml -e "domain_name=$(cd ../terraform && terraform output -raw backend_domain)"
 ```
 
 Local and CI runs share the same Terraform state (same GCS bucket), so
@@ -131,7 +148,8 @@ either can safely be used interchangeably.
 
 ## After both are deployed
 
-- In your Strava API app settings, set the Authorized Callback Domain to
-  `nobuddy.org` (where the frontend is served from).
-- In Google Cloud Console, restrict the static-maps API key to that same
-  domain.
+In your Strava API app settings, set the Authorized Callback Domain to
+`nobuddy.org` (where the frontend is served from). The Maps Static API key
+is already restricted correctly - Terraform creates it scoped to the Maps
+Static API and to HTTP referrers on `frontend_domain`, no manual Console
+step needed.
