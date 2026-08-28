@@ -14,7 +14,12 @@ export class LoginComponent {
 
   constructor(private _route: ActivatedRoute) {
     let STRAVA_BASE_URL = 'http://www.strava.com/';
-    let STRAVA_REDIRECT_URL = window.location.protocol + '//' + window.location.hostname + ':' + window.location.port + '/activities';
+    // document.baseURI resolves the <base href> the build sets via
+    // --base-href (e.g. /RideMergeBuddy/ on GitHub Pages, / in dev) against
+    // the real origin - building this from window.location.hostname/port by
+    // hand broke both on a portless https origin (empty port left a bare
+    // "host:/activities") and on any base-href subpath (dropped it entirely).
+    let STRAVA_REDIRECT_URL = document.baseURI + 'activities';
     let client_id = "66715";
     this.STRAVA_AUTH_URL = STRAVA_BASE_URL + 'oauth/authorize?client_id=' + client_id + '&approval_prompt=force&scope=activity:read_all,activity:write&response_type=code&redirect_uri=' + STRAVA_REDIRECT_URL;
 
