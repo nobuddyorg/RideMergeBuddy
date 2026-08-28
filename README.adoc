@@ -1,3 +1,13 @@
+[WARNING]
+====
+*⚠ DISCONTINUED ⚠*
+
+Strava has restricted API access to subscription accounts only. Without a
+Strava subscription this app can no longer authenticate or read activities
+at all, so it is no longer usable. Development has stopped and the hosted
+infrastructure (backend VM, DNS, API keys) has been torn down.
+====
+
 This is a Spring Boot Groovy App with Angular Frontend that displays Strava activities and enables you to merge activites into a new one.
 
 = How it looks
