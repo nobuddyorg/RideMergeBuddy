@@ -107,17 +107,23 @@ jobs:
         # stuck (crash loop, guest agent failure, wrong image, etc.).
         run: |
           IP="${{ steps.tf.outputs.ip }}"
+          LAST_ERR=""
           for i in $(seq 1 60); do
-            if ssh-keyscan -H "$IP" >> ~/.ssh/known_hosts 2>/dev/null && grep -q "$IP" ~/.ssh/known_hosts; then
+            if LAST_ERR=$(ssh-keyscan -H "$IP" 2>&1 >> ~/.ssh/known_hosts) && grep -q "$IP" ~/.ssh/known_hosts; then
               exit 0
             fi
             sleep 10
           done
           echo "Timed out waiting for SSH on $IP" >&2
+          echo "--- Last ssh-keyscan error ---" >&2
+          echo "$LAST_ERR" >&2
           echo "--- gcloud compute instances describe ---" >&2
           gcloud compute instances describe "${{ steps.tf.outputs.instance }}" \
             --zone "${{ steps.tf.outputs.zone }}" \
-            --format="yaml(status,networkInterfaces)" >&2 || true
+            --format="yaml(status,tags,networkInterfaces)" >&2 || true
+          echo "--- gcloud compute firewall-rules list ---" >&2
+          gcloud compute firewall-rules list \
+            --format="table(name,network,sourceRanges.list(),targetTags.list(),allowed[].map().firewall_rule().list())" >&2 || true
           echo "--- Serial console output (last 200 lines) ---" >&2
           gcloud compute instances get-serial-port-output "${{ steps.tf.outputs.instance }}" \
             --zone "${{ steps.tf.outputs.zone }}" --port 1 2>&1 | tail -200 >&2 || true
