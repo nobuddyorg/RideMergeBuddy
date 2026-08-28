@@ -142,6 +142,15 @@ project(':src-api').tasks.named('compileJava').configure {
     dependsOn(tasks.named('runSwaggerCodeGen'))
 }
 
+// swagger-codegen-cli 2.4.12 annotates generated classes with
+// @javax.annotation.Generated, which JDK 9+ dropped from the default
+// classpath (it lived in java.xml.ws.annotation, removed in JDK 11).
+project(':src-api') {
+    dependencies {
+        compileOnly 'javax.annotation:javax.annotation-api:1.3.2'
+    }
+}
+
 //bootRun.dependsOn(['build'])
 build.dependsOn(['openApiGenerate', 'runSwaggerCodeGen'])
 tasks.openApiGenerate.dependsOn('generateOpenApiDocs')
