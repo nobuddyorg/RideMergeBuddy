@@ -34,6 +34,8 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v3
 
+      - uses: google-github-actions/setup-gcloud@v2
+
       - name: Derive an SSH keypair for the VM from the private key secret
         run: |
           install -m 700 -d ~/.ssh
@@ -66,6 +68,8 @@ jobs:
           echo "ip=$(terraform output -raw external_ip)" >> "$GITHUB_OUTPUT"
           echo "domain=$(terraform output -raw backend_domain)" >> "$GITHUB_OUTPUT"
           echo "maps_key=$(terraform output -raw maps_static_api_key)" >> "$GITHUB_OUTPUT"
+          echo "instance=$(terraform output -raw instance_name)" >> "$GITHUB_OUTPUT"
+          echo "zone=$(terraform output -raw zone)" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
@@ -97,7 +101,10 @@ jobs:
         # On a first run the VM was just created by Terraform above and SSH
         # may not have come up yet, so retry instead of failing outright.
         # e2-micro's cold boot + sshd startup measured >150s in practice,
-        # so budget for up to 10 minutes.
+        # so budget for up to 10 minutes. If it never comes up, dump the
+        # instance status and serial console output before failing - that's
+        # the only way to tell a slow boot apart from a VM that's actually
+        # stuck (crash loop, guest agent failure, wrong image, etc.).
         run: |
           IP="${{ steps.tf.outputs.ip }}"
           for i in $(seq 1 60); do
@@ -107,6 +114,13 @@ jobs:
             sleep 10
           done
           echo "Timed out waiting for SSH on $IP" >&2
+          echo "--- gcloud compute instances describe ---" >&2
+          gcloud compute instances describe "${{ steps.tf.outputs.instance }}" \
+            --zone "${{ steps.tf.outputs.zone }}" \
+            --format="yaml(status,networkInterfaces)" >&2 || true
+          echo "--- Serial console output (last 200 lines) ---" >&2
+          gcloud compute instances get-serial-port-output "${{ steps.tf.outputs.instance }}" \
+            --zone "${{ steps.tf.outputs.zone }}" --port 1 2>&1 | tail -200 >&2 || true
           exit 1
 
       - name: Run Ansible playbook

@@ -7,6 +7,10 @@ output "instance_name" {
   value = google_compute_instance.app.name
 }
 
+output "zone" {
+  value = var.zone
+}
+
 output "ssh_command" {
   value = "ssh ${var.ssh_user}@${google_compute_address.static_ip.address}"
 }
