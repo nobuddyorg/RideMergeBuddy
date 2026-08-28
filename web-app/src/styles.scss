@@ -20,6 +20,19 @@ body {
   height: 75px;
 }
 
+@media (max-width: 600px) {
+  .site-footer {
+    height: 40px;
+    font-size: 11px;
+    line-height: 16px;
+  }
+
+  .site-footer img {
+    max-height: 24px;
+    width: auto;
+  }
+}
+
 .site-footer a {
   color: #737373;
 }
