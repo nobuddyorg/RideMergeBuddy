@@ -30,8 +30,6 @@ configurations {
 sourceSets {
     sourceSets.main.groovy.srcDirs = ['src/main/groovy']
     sourceSets.test.groovy.srcDirs = ['src/test/groovy']
-    sourceSets.main.java.srcDirs = ['src-api/src/main/java']
-    sourceSets.test.java.srcDirs = []
 }
 
 repositories {
