@@ -12,9 +12,14 @@
 
   tasks:
     - name: Install Java runtime and prerequisites
+      # debian-12 (bookworm)'s default repos only ship openjdk-17, not
+      # openjdk-11 - the jar is built with JDK 11 (a build.gradle/Gradle
+      # 6.8.3 constraint) but that only pins bytecode compatibility, not
+      # the JRE version needed to run it; newer JVMs run older bytecode
+      # fine, so 17 here is just the JRE that's actually installable.
       apt:
         name:
-          - openjdk-11-jre-headless
+          - openjdk-17-jre-headless
           - debian-keyring
           - debian-archive-keyring
           - apt-transport-https
