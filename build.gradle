@@ -11,7 +11,7 @@ plugins {
 }
 
 subprojects {
-    apply plugin: 'java'
+    apply plugin: 'java-library'
 }
 
 apply plugin: "com.github.johnrengelman.processes"
@@ -151,17 +151,26 @@ project(':src-api').tasks.named('compileJava').configure {
 // a throwaway spec and reading its output), plus javax.annotation-api,
 // which JDK 9+ dropped from the default classpath (the generated code's
 // @javax.annotation.Generated annotations used to get it for free).
+//
+// These are `api`, not `implementation`: root's compileGroovy needs them
+// on its OWN compile classpath, not just at runtime. Groovy's compiler
+// loads referenced classes' full bytecode (via ASM) to resolve casts/
+// types even when the calling code doesn't touch those types directly -
+// e.g. ApiClient's own fields/methods reference okio.Source, so it must
+// be resolvable wherever ApiClient itself is being type-checked. A plain
+// `implementation project(':src-api')` dependency only exposes src-api's
+// own compiled output to root, not src-api's transitive dependencies.
 project(':src-api') {
     repositories {
         mavenCentral()
     }
     dependencies {
-        implementation 'io.swagger:swagger-annotations:1.5.17'
-        implementation 'com.squareup.okhttp:okhttp:2.7.5'
-        implementation 'com.squareup.okhttp:logging-interceptor:2.7.5'
-        implementation 'com.google.code.gson:gson:2.8.1'
-        implementation 'io.gsonfire:gson-fire:1.8.0'
-        implementation 'org.threeten:threetenbp:1.3.5'
+        api 'io.swagger:swagger-annotations:1.5.17'
+        api 'com.squareup.okhttp:okhttp:2.7.5'
+        api 'com.squareup.okhttp:logging-interceptor:2.7.5'
+        api 'com.google.code.gson:gson:2.8.1'
+        api 'io.gsonfire:gson-fire:1.8.0'
+        api 'org.threeten:threetenbp:1.3.5'
         compileOnly 'javax.annotation:javax.annotation-api:1.3.2'
     }
 }
