@@ -96,13 +96,15 @@ jobs:
       - name: Trust the VM host key
         # On a first run the VM was just created by Terraform above and SSH
         # may not have come up yet, so retry instead of failing outright.
+        # e2-micro's cold boot + sshd startup measured >150s in practice,
+        # so budget for up to 10 minutes.
         run: |
           IP="${{ steps.tf.outputs.ip }}"
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             if ssh-keyscan -H "$IP" >> ~/.ssh/known_hosts 2>/dev/null && grep -q "$IP" ~/.ssh/known_hosts; then
               exit 0
             fi
-            sleep 5
+            sleep 10
           done
           echo "Timed out waiting for SSH on $IP" >&2
           exit 1
