@@ -108,11 +108,22 @@ jobs:
         # output before failing - that's the only way to tell a slow boot
         # apart from a VM that's actually stuck (crash loop, guest agent
         # failure, wrong image, etc.).
+        #
+        # The actual root cause of every prior "timeout" here: ssh-keyscan
+        # -H hashes the host identifier in every line it writes to
+        # known_hosts, so the plaintext IP this loop grepped for could
+        # never appear - the retry kept "failing" its own success check
+        # even though SSH was reachable and responding correctly the whole
+        # time (confirmed via the diagnostics: healthy VM, matching
+        # firewall rule/tags, and ssh-keyscan's own stderr showing a
+        # completed SSH-2.0 banner exchange). Dropping -H fixes the check;
+        # SSH itself matches hashed or plaintext known_hosts entries either
+        # way, so this has no effect on the actual Ansible SSH step below.
         run: |
           IP="${{ steps.tf.outputs.ip }}"
           LAST_ERR=""
           for i in $(seq 1 12); do
-            if LAST_ERR=$(ssh-keyscan -H "$IP" 2>&1 >> ~/.ssh/known_hosts) && grep -q "$IP" ~/.ssh/known_hosts; then
+            if LAST_ERR=$(ssh-keyscan "$IP" 2>&1 >> ~/.ssh/known_hosts) && grep -q "$IP" ~/.ssh/known_hosts; then
               exit 0
             fi
             sleep 10
