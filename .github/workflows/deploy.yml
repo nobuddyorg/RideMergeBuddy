@@ -100,15 +100,18 @@ jobs:
       - name: Trust the VM host key
         # On a first run the VM was just created by Terraform above and SSH
         # may not have come up yet, so retry instead of failing outright.
-        # e2-micro's cold boot + sshd startup measured >150s in practice,
-        # so budget for up to 10 minutes. If it never comes up, dump the
-        # instance status and serial console output before failing - that's
-        # the only way to tell a slow boot apart from a VM that's actually
-        # stuck (crash loop, guest agent failure, wrong image, etc.).
+        # Diagnostics below (added while chasing a real SSH-reachability
+        # issue) showed the VM itself boots and reaches multi-user.target
+        # in ~23s every time, so a long budget here just slows down failure
+        # diagnosis without buying real margin - 2 minutes is generous.
+        # If it never comes up, dump the instance status and serial console
+        # output before failing - that's the only way to tell a slow boot
+        # apart from a VM that's actually stuck (crash loop, guest agent
+        # failure, wrong image, etc.).
         run: |
           IP="${{ steps.tf.outputs.ip }}"
           LAST_ERR=""
-          for i in $(seq 1 60); do
+          for i in $(seq 1 12); do
             if LAST_ERR=$(ssh-keyscan -H "$IP" 2>&1 >> ~/.ssh/known_hosts) && grep -q "$IP" ~/.ssh/known_hosts; then
               exit 0
             fi
