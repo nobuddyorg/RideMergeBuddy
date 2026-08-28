@@ -41,3 +41,12 @@ out/
 .vscode/
 
 node_modules/
+
+### Deploy (Terraform/Ansible) ###
+deploy/terraform/.terraform/
+deploy/terraform/*.tfstate
+deploy/terraform/*.tfstate.*
+deploy/terraform/terraform.tfvars
+deploy/terraform/backend.hcl
+deploy/ansible/inventory.ini
+

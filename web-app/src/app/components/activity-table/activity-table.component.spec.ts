@@ -47,6 +47,11 @@ describe('ActivityTableComponent', () => {
   });
 
   beforeEach(() => {
+    // Some tests below (e.g. "constructor with code") depend on
+    // localStorage NOT already holding a token, but other tests in this
+    // suite write 'token' to it without cleaning up - clear it here so
+    // test order can't leak state between them.
+    localStorage.clear();
     fixture = TestBed.createComponent(ActivityTableComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

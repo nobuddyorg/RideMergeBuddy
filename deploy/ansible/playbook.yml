@@ -1,0 +1,113 @@
+---
+- name: Configure activity-merger host
+  hosts: app
+  become: true
+
+  vars:
+    app_user: activitymerger
+    app_dir: /opt/activitymerger
+    app_internal_port: 8080
+    domain_name: "REPLACE_ME.example.com"
+    jar_src: "{{ playbook_dir }}/../../build/libs/activitymerger-0.1.jar"
+
+  tasks:
+    - name: Install Java runtime and prerequisites
+      apt:
+        name:
+          - openjdk-11-jre-headless
+          - debian-keyring
+          - debian-archive-keyring
+          - apt-transport-https
+          - curl
+          - gnupg
+        state: present
+        update_cache: true
+
+    - name: Fetch Caddy's Cloudsmith GPG key and dearmor it
+      shell: |
+        set -o pipefail
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+          | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+      args:
+        creates: /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        executable: /bin/bash
+
+    - name: Add Caddy apt repository source list
+      get_url:
+        url: https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt
+        dest: /etc/apt/sources.list.d/caddy-stable.list
+        mode: "0644"
+      register: caddy_repo_list
+
+    - name: Install Caddy
+      apt:
+        name: caddy
+        state: present
+        update_cache: true
+
+    - name: Create system user for the app
+      user:
+        name: "{{ app_user }}"
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Create app directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0750"
+
+    - name: Copy application jar (build it first with deploy/build.sh)
+      copy:
+        src: "{{ jar_src }}"
+        dest: "{{ app_dir }}/app.jar"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0640"
+      notify: restart activitymerger
+
+    - name: Install systemd unit
+      template:
+        src: templates/activitymerger.service.j2
+        dest: /etc/systemd/system/activitymerger.service
+        mode: "0644"
+      notify:
+        - reload systemd
+        - restart activitymerger
+
+    - name: Install Caddyfile
+      template:
+        src: templates/Caddyfile.j2
+        dest: /etc/caddy/Caddyfile
+        mode: "0644"
+      notify: restart caddy
+
+    - name: Enable and start activitymerger
+      systemd:
+        name: activitymerger
+        enabled: true
+        state: started
+
+    - name: Enable and start caddy
+      systemd:
+        name: caddy
+        enabled: true
+        state: started
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: true
+
+    - name: restart activitymerger
+      systemd:
+        name: activitymerger
+        state: restarted
+
+    - name: restart caddy
+      systemd:
+        name: caddy
+        state: restarted

@@ -1,0 +1,7 @@
+{# Backend-only host now: the Angular frontend lives on GitHub Pages and
+   calls this API cross-origin (backend already sends permissive CORS
+   headers - see DevCorsConfiguration.groovy). Caddy terminates standard
+   HTTPS (80/443, automatic cert) and proxies to Spring Boot internally. #}
+{{ domain_name }} {
+    reverse_proxy localhost:{{ app_internal_port }}
+}

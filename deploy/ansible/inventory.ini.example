@@ -1,0 +1,2 @@
+[app]
+activitymerger ansible_host=REPLACE_WITH_TERRAFORM_OUTPUT_external_ip ansible_user=REPLACE_WITH_ssh_user
