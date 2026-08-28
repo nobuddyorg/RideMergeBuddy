@@ -9,12 +9,17 @@ import {ActivatedRoute, Params} from "@angular/router";
 export class LoginComponent {
   STRAVA_AUTH_URL: string;
 
-  message: string = 'This page will enable you to watch your Strava activities and merge them into one new activity (retaining the old ones). This project was brought to life, because my bike computer automatically records my rides and creates activities. Unfortunately it is not able to stop during a trip. As soon as it detects a break of 5 minutes or more, it will create a new activity. And I want to see my day trips as one, regardless of breaks during the trip. Hope it helps you, too.';
+  message: string = 'This page lets you merge multiple Strava activities into one - handy when a single ride or trip gets split into several activities (e.g. after a long stop) and you\'d rather see it as one continuous activity. Your original activities are kept untouched.';
   displayMessage: string = this.message;
 
   constructor(private _route: ActivatedRoute) {
     let STRAVA_BASE_URL = 'http://www.strava.com/';
-    let STRAVA_REDIRECT_URL = window.location.protocol + '//' + window.location.hostname + ':' + window.location.port + '/activities';
+    // document.baseURI resolves the <base href> the build sets via
+    // --base-href (e.g. /RideMergeBuddy/ on GitHub Pages, / in dev) against
+    // the real origin - building this from window.location.hostname/port by
+    // hand broke both on a portless https origin (empty port left a bare
+    // "host:/activities") and on any base-href subpath (dropped it entirely).
+    let STRAVA_REDIRECT_URL = document.baseURI + 'activities';
     let client_id = "66715";
     this.STRAVA_AUTH_URL = STRAVA_BASE_URL + 'oauth/authorize?client_id=' + client_id + '&approval_prompt=force&scope=activity:read_all,activity:write&response_type=code&redirect_uri=' + STRAVA_REDIRECT_URL;
 
