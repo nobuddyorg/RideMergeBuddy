@@ -23,7 +23,7 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       # windows-latest's default JDK has moved past what Gradle 6.8.3 can
       # even parse settings.gradle under ("Unsupported class file major
       # version"), independent of anything this repo's code does - pin it.
@@ -31,7 +31,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '11'
-      - uses: actions/setup-node@v2
+      - uses: actions/setup-node@v4
         with:
           node-version: '14'
 

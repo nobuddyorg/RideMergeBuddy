@@ -63,6 +63,15 @@ jobs:
         working-directory: web-app
         run: npx ng build --base-href "${{ steps.basehref.outputs.value }}"
 
+      - name: Add 404.html for deep-link/refresh support
+        # GitHub Pages is a static host - a hard navigation or refresh on a
+        # client-side route like /RideMergeBuddy/login has no matching file,
+        # so Pages serves 404.html's content instead (while the browser
+        # still shows the real URL). Making that a copy of index.html lets
+        # Angular boot normally and its router pick up the correct route
+        # from the actual address bar.
+        run: cp web-app/dist/web-app/index.html web-app/dist/web-app/404.html
+
       - name: Add CNAME for custom domain
         if: vars.PAGES_CUSTOM_DOMAIN != ''
         run: echo "${{ vars.PAGES_CUSTOM_DOMAIN }}" > web-app/dist/web-app/CNAME
