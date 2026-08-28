@@ -9,14 +9,9 @@ class Secrets {
 
     def getSecret(def key) {
         if (!secrets) {
-            def secretsFile = new File(getSecretFilePath())
-            secrets = new JsonSlurper().parseText(secretsFile.text)
+            secrets = new JsonSlurper().parseText(getClass().getResourceAsStream('/.secrets').text)
         }
 
         secrets."$key"
-    }
-
-    private URI getSecretFilePath() {
-        getClass().getResource('/.secrets').toURI()
     }
 }
