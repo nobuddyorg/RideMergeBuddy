@@ -1,0 +1,64 @@
+# One-off diagnostic: SSH into the backend VM and dump the activitymerger
+# service's logs. Manual only - this doesn't touch infra or deploy
+# anything, it just reads state and reports back. Delete once no longer
+# needed; it's not part of the normal deploy pipeline.
+name: Debug backend logs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Derive an SSH keypair for the VM from the private key secret
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keygen -y -f ~/.ssh/deploy_key > ~/.ssh/deploy_key.pub
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+
+      - name: Terraform init
+        working-directory: deploy/terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=activitymerger"
+
+      - name: Read Terraform outputs
+        id: tf
+        working-directory: deploy/terraform
+        run: echo "ip=$(terraform output -raw external_ip)" >> "$GITHUB_OUTPUT"
+
+      - name: Trust the VM host key
+        run: |
+          ssh-keyscan "${{ steps.tf.outputs.ip }}" >> ~/.ssh/known_hosts
+
+      - name: Dump activitymerger service status and logs
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ vars.GCP_SSH_USER }}@${{ steps.tf.outputs.ip }}" '
+            echo "--- systemctl status activitymerger ---"
+            sudo systemctl status activitymerger --no-pager || true
+            echo "--- journalctl -u activitymerger (last 300 lines) ---"
+            sudo journalctl -u activitymerger -n 300 --no-pager || true
+            echo "--- systemctl status caddy ---"
+            sudo systemctl status caddy --no-pager || true
+            echo "--- journalctl -u caddy (last 100 lines) ---"
+            sudo journalctl -u caddy -n 100 --no-pager || true
+          '
